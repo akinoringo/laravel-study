@@ -8,6 +8,8 @@ services:
     build:
       context: .
       dockerfile: ./infra/docker/php/Dockerfile
+    depends_on:
+      - db
     volumes:
       - type: volume
         source: php-fpm-socket
@@ -34,6 +36,8 @@ services:
     build:
       context: .
       dockerfile: ./infra/docker/nginx/Dockerfile
+    depends_on:
+      - db      
     ports:
       - target: 80
         published: ${WEB_PORT:-80}
