@@ -1,0 +1,318 @@
+■Redis
+◇Point
+・REmote DIctionary Server
+・in-memory databaseであるが故に高速アクセスが可能
+・client/serverモデルを採用しているが故に複数のクライアントからアクセスすることが可能
+
+◇in-memory database
+・HDDやSSDなどDiskを利用せずにメインメモリにデータを保持
+・常に時間のかかるDisk I/Oがなくなることで、パフォーマンスの改善が得られる
+
+◇client/serverモデル
+・Redisではclient/serverモデルが採用されています。アプリケーション側でRedis client libraryを利用し、TCP/IPを通して、リクエストをRedis serverに送ります。
+
+・edis serverではRAMに保持されているデータを取得し、それをResponseとしてアプリケーションに返します。
+
+◇TCP/TP
+・TCP/IPとは、インターネットを含む多くのコンピュータネットワークにおいて、世界標準的に利用されている通信プロトコルのこと
+・TCPとは通信プロトコルのひとつで簡単に説明すると「送ったデータが相手に届いたか、その都度確認しながら通信するやり方」や「正確な信号を送信する通信の規格を定めたもの」と言えます。わかりやすく言うと、エラーが起きてもクライアント側は繰り返しサーバにリクエストを送信し、サーバ側は正常に受け取って確実にレスポンスを返します。
+・IPとはIPアドレスと呼ばれる数値を付与しその数字を用いて通信先の指定及び呼び出しを行いネットワーク通信を行うことです。
+
+◇RAM
+・作業領域を表すRAM
+・Random Access Memory
+
+■LaravekでRedisを使う
+◇手順
+①パッケージの導入
+・predis/presisパッケージをcomposerでインストール（こちらは制作者が開発を中断した）
+・もしくは、PHPRedisというパッケージでも可
+
+②Redisの設定
+・DBの設定ファイルを設定
+
+laravel/config/database.php
+
+'redis' => [
+
+    'client' => 'predis',
+
+    'default' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'password' => env('REDIS_PASSWORD', null),
+        'port' => env('REDIS_PORT', 6379),
+        'database' => env('REDIS_DB', 0),
+        'read_write_timeout' => env('REDIS_READ_WRITE_TIMEOUT', 60),
+    ],
+
+],
+
+laravel/.env
+
+CACHE_DRIVER=redis
+REDIS_HOST=192.168.99.999
+REDIS_PASSWORD=your_password
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_READ_WRITE_TIMEOUT=60
+
+③キャッシュ操作を設定する
+・RedisファザードまたはCacheファザードを使う
+
+Redisファザードの使用例）
+Redis::command('SET', [$key, $value]);
+
+④アクション例（[SET]strings型データを登録する）
+
+/**
+ * strings型データを登録する
+ */
+public function set()
+{
+  $this->id = 6;
+
+  // DBからデータ取得
+  $data = json_encode(DB::table($this->table)->select('id', 'name', 'email')->where('id', $this->id)->first());
+
+  // Redisへリスト型として保存する
+  Redis::command('SET', [$this->id, $data]);
+}
+
+※commandメソッドでは、第一引数にRedisコマンドを渡し、第二引数にKEYとValueをセットする。
+
+⑤アクション例（[GET]strings型データを取得する）
+
+/**
+ * strings型データを取得する
+ */
+public function get()
+{
+  $this->id = 6;
+
+  $data = json_decode(Redis::command('GET', [$this->id]));
+
+}
+
+⑥アクション例（[GETRANGRE]strings型データを範囲を指定して取得する）
+
+/**
+ * strings型データを範囲を指定して取得する
+ */
+public function getrange()
+{
+  $data = Redis::command('GETRANGE', [1, 8, 22]);
+
+}
+
+※KEY:1のデータに対して8文字目から22文字を取得しています。
+
+他にも、以下のようなものがある
+・RPUSH:list型データを登録する
+
+/**
+ * リスト型データを登録する（末尾）
+ */
+public function rpush()
+{
+  $this->id = 6;
+
+  // DBからデータ取得
+  $data = json_encode(DB::table($this->table)->select('id', 'name', 'email')->where('id', $this->id)->first());
+
+  // Redisへリスト型として保存する
+  Redis::command('RPUSH', ['user', $data]);
+}
+
+・[LRANGE]指定した範囲でのリスト型データを取得する
+
+/**
+ * 指定した範囲でのリスト型データを取得する
+ */
+public function lrange()
+{
+  $data = Redis::command('LRANGE', ['user',2,6]);
+
+  $users = array();
+  foreach ($data as $d) {
+    $users[] = json_decode($d);
+  }
+
+}
+
+・[SADD]set型のデータを登録する
+
+/**
+ * セット型のデータを登録する
+ */
+public function sadd()
+{
+  $data =[
+    "ja" => ["おはよう", "こんにちは", "こんばんは"],
+    "en" => ["good morning", "hello", "good evening"]
+  ];
+
+  foreach ($data as $key => $value) {
+    Redis::command('SADD', [$key, $value]);
+  }
+}
+
+・・・
+
+■ルーティング
+・Laravel 6系のアクションメソッドのルーティング（url, controller@method）の使用には、RouteServiceProviderでnamespaceを設定する必要がある
+
+参考：https://qiita.com/tamakiiii/items/e71040173fa0a1fcad83
+
+
+■マイグレーション
+・user_idを外部キーに設定するときにunsined()としないとエラーが出る
+※詳細は調べること
+
+例：
+$table->bigInteger('user_id')->unsigned();
+$table->foreign('user_id')->references('id')->on('users');
+
+■リレーション
+・Laravel 8系では、BelongsToなどは、読み込まなくても良くなった
+
+■Auth
+・ユーザー登録やログイン機能は、Laravel 8系でも laravel uiをインストールすることで使用可能になる
+
+composer require laravel/ui
+php artisan ui vue --auth
+
+■RegisterUsersトレイト
+・Laravel 8系では格納場所がvendor/laravel/ui/auth-backend配下に変わっている
+・ほか解説
+
+    public function register(Request $request)
+    {
+		// バリデーションかける
+        $this->validator($request->all())->validate();
+		
+		// ユーザー情報をデータベースのusersテーブルに登録し、それをイベントとして発生させている 
+        event(new Registered($user = $this->create($request->all())));
+		
+		// 登録ユーザーでログイン済みの状態にする
+        $this->guard()->login($user);
+		
+		// $this->registered($request, $user)の返り値があればそれをレスポンスとして返す
+        if ($response = $this->registered($request, $user)) {
+            return $response;
+        }
+		
+		// 基本的には、処理が終わったらRedirectPathへリダイレクトさせる
+        return $request->wantsJson()
+                    ? new JsonResponse([], 201)
+                    : redirect($this->redirectPath());
+    }
+	
+■RedirectUserトレイト
+
+    public function redirectPath()
+    {
+		// method_exists関数は、第一引数にクラス、第二引数にメソッド名を受け取り、第一引数のクラスに第二引数のメソッドが存在するかどうかをtrueかfalseで返します。
+        if (method_exists($this, 'redirectTo')) {
+            return $this->redirectTo();
+        }
+		
+		// RedirectToに何も設定していない場合は、/homeへリダイレクト
+        return property_exists($this, 'redirectTo') ? $this->redirectTo : '/home';
+    }
+	
+※RedirectToには、RouteServiceProviderによって'/home'が設定されているので、
+リダイレクトさせたいurlを入力する
+
+■AutehnticatesUsersトレイト
+◇Logoutメソッド
+
+    public function logout(Request $request)
+    {
+		// ユーザーをログアウトさせる処理
+        $this->guard()->logout();
+		
+		// セッションを再度作成
+        $request->session()->invalidate();
+		
+		// CSRFトークンを再度作成
+        $request->session()->regenerateToken();
+		
+		// loggedOutメソッドから何か戻り値があれば、それをlogoutアクションメソッドの呼び出し元に返している
+        if ($response = $this->loggedOut($request)) {
+            return $response;
+        }
+		
+		// 特に戻り値がなければ、'/'にリダイレクト
+        return $request->wantsJson()
+            ? new JsonResponse([], 204)
+            : redirect('/');
+    }
+	
+※logout後のリダイレクト先を変更したい場合は、loginContollerでloggedOutメソッドをオーバーライドする処理を記載する
+
+■validationエラーメッセージ(View)
+
+// エラーの有無によってif分岐
+@if ($errors->any())
+  <div class="card-text text-left alert alert-danger">
+    <ul class="mb-0" >
+	
+	  // all()メソッドですべてのエラ〜メッセージを配列で取得してforeachで繰り返し表示
+      @foreach($errors->all() as $error)
+      <li>{{ $error }}</li>
+      @endforeach
+	  
+    </ul>
+  </div>
+@endif
+
+■loginアクション
+
+    public function login(Request $request)
+    {
+		// バリデーション
+        $this->validateLogin($request);
+
+		// ログイン試行回数を超過していればロックアウト
+        if (method_exists($this, 'hasTooManyLoginAttempts') &&
+            $this->hasTooManyLoginAttempts($request)) {
+            $this->fireLockoutEvent($request);
+
+            return $this->sendLockoutResponse($request);
+        }
+
+		// ログイン試行して認証OKであればログイン成功
+        if ($this->attemptLogin($request)) {
+            return $this->sendLoginResponse($request);
+        }
+
+		// 認証NGであればログイン試行を1増やしてログイン画面をレスポンス
+        $this->incrementLoginAttempts($request);
+
+        return $this->sendFailedLoginResponse($request);
+    }
+	
+※試行回数の上限は、ThrottlesLoginトレイトに記載
+※これをカスタマイズする場合は、LoginControllerでオーバーライドする（以下例）
+
+class LoginController extends Controller
+{
+    // 略
+    use AuthenticatesUsers;
+
+    protected $maxAttempts = 5;
+    protected $decayMinutes = 1;
+    // 略
+}
+
+※ログイン試行回数は、Laravelのキャッシュで管理されている
+storage/framework/cache/data
+
+■remember meトークン
+
+login.blade.php
+
+// 「次回から自動でログインする」を予め設定する処理（本番では、非推奨）
+<input type="hidden" name="remember" id="remember" value="on">
+
+※最初のログイン成功後にブラウザにはremember_web_...という名前のCookieが保存され、Laravelではこれがあれば２回目からのログインを不要にしている。このCookieがない場合は、ログイン後に120分間ユーザーの操作がないとログイン状態が解除される。この120分という設定はconfigディレクトリのsession.phpにある。
