@@ -316,3 +316,60 @@ login.blade.php
 <input type="hidden" name="remember" id="remember" value="on">
 
 ※最初のログイン成功後にブラウザにはremember_web_...という名前のCookieが保存され、Laravelではこれがあれば２回目からのログインを不要にしている。このCookieがない場合は、ログイン後に120分間ユーザーの操作がないとログイン状態が解除される。この120分という設定はconfigディレクトリのsession.phpにある。
+
+■フォームリクエスト
+・通常、どのユーザーならOKといった認可はここで行う
+・あるいは、ポリシーを作成してそこで設定する
+
+    public function authorize()
+    {
+        return true;
+    }
+	
+■edit()メソッドとuriから渡る変数について
+
+    public function edit(Article $article)
+    {
+        return view('articles.edit', ['article' => $article]);    
+    }
+
+※'article' => $article->idでも良い。$articleとModelのインスタンスを渡してもLaravelは問題なく処理してくれる
+
+■リソースフルコントローラの@method
+・updateのルーティングは、クライアントからHTTPのPUTメソッドかPATCHメソッドでリクエストする必要がある。しかし、HTMLのformタグは、PUTメソッドやPATCHメソッドをサポートしていない。
+そのため、laravelのbladeでpatchメソッドを使う場合は、formタグではmethod属性をpostのままにし、@methodでpatchメソッドを指定する。
+
+■PUT/PATCHとは
+・HTTPのPUTメソッドは、新しいリソースを新規作成するか、既存のリソースを置き換える時に使用します。
+・HTTPのPATCHメソッドは、既存のリソースを部分的に変更する時に使用します。
+・HTTPリクエストに使うのがPUTメソッドであってもPATCHメソッドであっても、ルーティングさえ正常に処理されれば、記事更新結果に影響はありません
+
+■Policy
+・コマンド
+php artisan make:policy ArticlePolicy --model=Article
+
+・対応関係
+viewAny: index
+view: show
+create: create, store
+update: edit, update
+destroy: destroy
+
+・policyをControllerで使用
+
+    public function __construct()
+    {
+        $this->authorizeResource(Article::class, 'article');
+    }
+	
+	
+・nullableな型宣言
+例：
+?User $user
+
+※ポリシーの登録は、本来AuthServiceProviderに登録する必要があるが、以下の条件を満たしている場合は登録不要となる
+
+・モデルがApp\Models配下
+・ポリシーがApp\Policies配下
+・ポリシー名がモデル名Policyという名前
+
